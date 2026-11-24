@@ -2,7 +2,10 @@
 name = "kite-editor"
 version = "0.1.0"
 edition = "2024"
-description = "A terminal IDE that behaves like a desktop one"
+description = "A light and nimble terminal text editor"
+license = "MIT"
+repository = "https://github.com/ryan-mcwilliams/kite-editor"
+readme = "README.md"
 
 # The project is kite-editor; the command it installs is `kite`.
 [[bin]]

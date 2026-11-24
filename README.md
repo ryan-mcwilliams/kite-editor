@@ -1,65 +1,161 @@
 # kite-editor
 
-A terminal IDE that behaves like a desktop one: open a folder, file tree on
-the left, tabs, mouse everywhere, a command palette, and language servers for
-diagnostics, completion, hover, go-to-definition and formatting. No modes.
-
-Written from scratch in Rust (ratatui + tree-sitter), about 5,000 lines, so
-the whole thing fits in your head and is yours to change.
-
-## Run it
-
-You need Rust (https://rustup.rs) and a C compiler (on macOS:
-`xcode-select --install`), which the tree-sitter grammars use.
-
-```sh
-cargo run --release -- ~/some/project     # try it
-cargo install --path .                    # put `kite` on your PATH
-kite .                                    # open the current directory
-kite src/main.rs                          # open a file (and its project)
+```
+╭────────────────────────────────╮
+│                                │
+│  ██╗  ██╗██╗████████╗███████╗  │
+│  ██║ ██╔╝██║╚══██╔══╝██╔════╝  │
+│  █████╔╝ ██║   ██║   █████╗    │
+│  ██╔═██╗ ██║   ██║   ██╔══╝    │
+│  ██║  ██╗██║   ██║   ███████╗  │
+│  ╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝  │
+│                                │
+╰────────────────────────────────╯
 ```
 
-The first build takes a few minutes; later ones are quick.
+**A light and nimble terminal text editor** that behaves like a desktop one:
+open a folder, file tree on the left, tabs, the mouse works everywhere, a
+command palette, and language servers for completion, hover, diagnostics,
+go-to-definition and formatting. No modes to learn: you type, and text
+appears.
+
+The command is `kite`. It's written from scratch in Rust (ratatui +
+tree-sitter), about 8,000 lines, small enough to read end to end and make
+your own.
+
+> **Status:** early and actively developed. It's used day to day on macOS;
+> expect rough edges, and please [report them](#contributing).
+
+## Features
+
+- **Project view**: a file tree with icons, tabs, and a fuzzy file finder.
+- **Command palette** listing every command and its key.
+- **Leader key** (Ctrl+T): a which-key menu for quick, mnemonic shortcuts.
+- **Language servers**: completion as you type, hover info (including on
+  mouse-over), go to definition (F12 or Alt/Option+Click), formatting and
+  inline diagnostics. Falls back to word completion without a server.
+- **Syntax highlighting** built in with tree-sitter, nothing to install.
+- **Editing comforts**: auto-closing brackets, quotes and HTML/JSX tags,
+  smart indentation, toggle comment, word-sized undo.
+- **Search** in the current file or across the project (respects `.gitignore`).
+- **Mouse everywhere**: click, drag-select, double/triple-click, scroll,
+  right-click context menus, a resizable sidebar.
+- **Themes**: One Dark (default), Monokai, Catppuccin Mocha, Dracula.
+- **Settings panel** (Ctrl+,) and a plain `config.toml` for everything else.
+
+## Install
+
+You need:
+
+- **Rust**, a recent stable toolchain (from [rustup.rs](https://rustup.rs)).
+  kite uses the 2024 edition and is developed on Rust 1.100.
+- **A C compiler**, which the tree-sitter grammars need. On macOS:
+  `xcode-select --install`. On Debian/Ubuntu: `sudo apt install build-essential`.
+
+Then install straight from GitHub:
+
+```sh
+cargo install --git https://github.com/ryan-mcwilliams/kite-editor
+```
+
+Or from a clone:
+
+```sh
+git clone https://github.com/ryan-mcwilliams/kite-editor
+cd kite-editor
+cargo install --path .
+```
+
+Either puts `kite` in `~/.cargo/bin`. The first build takes a few minutes
+(the tree-sitter grammars are compiled); later builds are quick. To update,
+run the same command again.
+
+## Quick start
+
+```sh
+kite .                # open the current directory as a project
+kite ~/code/my-app    # open another directory
+kite src/main.rs      # open a file, with its enclosing project
+```
+
+When you open a file, kite looks upward for a project marker (`.git`,
+`Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml`) and opens that folder
+as the project.
+
+Then:
+
+1. **Ctrl+F** to find a file, **Ctrl+P** for every command.
+2. **Ctrl+K** shows all keyboard shortcuts.
+3. **Ctrl+T** opens the leader menu.
+4. **Ctrl+S** saves, **Ctrl+W** closes the tab, **Ctrl+Q** quits.
+
+For completion and hover, install the language server for your language
+(see [Language servers](#language-servers)).
 
 ## Keys
 
 Terminals don't pass Cmd through to programs, so the defaults use Ctrl.
-Everything below can be rebound (see Configuration).
+Every key can be rebound; see [Configuration](docs/CONFIGURATION.md).
 
 | Key | Action |
 | --- | --- |
 | Ctrl+F | Go to file (fuzzy). Type `>` for commands, `:42` for a line |
 | Ctrl+P, F1, or Ctrl+Shift+P | Command palette (lists every command and its key) |
+| Ctrl+K | Keyboard shortcuts panel |
+| Ctrl+T | Leader key (see below) |
 | Ctrl+B / Ctrl+E | Toggle sidebar / move focus between tree and editor |
 | Ctrl+S, Ctrl+N, Ctrl+W, Ctrl+Q | Save, new file, close tab, quit |
 | Alt+] / Alt+[ (or Ctrl+PageDown/Up) | Next / previous tab |
 | Ctrl+Z, Ctrl+Y | Undo, redo |
 | Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+A | Copy, cut, paste, select all (no selection = whole line) |
 | Alt+F, F3, Shift+F3 | Find in file, next, previous |
-| Ctrl+Shift+F | Search in files (results panel; needs the kitty keyboard protocol — use F1 → "Search in Files…" otherwise) |
+| Ctrl+Shift+F | Search in files (needs the kitty keyboard protocol; otherwise use Ctrl+T s p) |
 | Ctrl+G | Go to line |
 | Ctrl+/ | Toggle line comment |
-| `>` ending an opening tag | Adds the closing tag (HTML, JSX/TSX); Enter between the tags splits them onto their own lines |
 | Tab / Shift+Tab | Indent / outdent selected lines |
 | Shift+arrows, Ctrl or Alt+arrows | Select; move by word |
 | Ctrl+Space | Completions (they also appear as you type) |
-| Ctrl+K | Keyboard shortcuts panel (Esc or Ctrl+K closes it) |
-| Alt+K | Hover info |
-| F12 or Alt+Click | Go to definition; Ctrl+O goes back. Holding Alt/Option underlines what the pointer is on, and the hover popup has a "Go to Definition" link |
+| Alt+K | Hover info for the symbol at the cursor |
+| F12 or Alt+Click | Go to definition; Ctrl+O goes back |
 | Alt+Shift+F | Format document |
-| Right-click | Context menu: on a file or folder in the tree (open, new file/folder, rename, duplicate, delete with confirmation, copy path, reveal in Finder), on empty tree space, or on code (go to definition, hover, format, cut/copy/paste, comment, copy path). Navigate with the mouse or ↑/↓ + Enter, Esc closes |
-| Ctrl+, (or F1 → "Settings…") | Settings panel — toggle/cycle options by category, saved to config.toml |
-| ↳ Appearance → Theme | Cycle One Dark (black editor background, default), Monokai, Catppuccin Mocha, Dracula |
+| Ctrl+, | Settings panel |
+| `>` ending an opening tag | Adds the closing tag (HTML, JSX/TSX) |
 
-Mouse: click to place the cursor, drag to select, double-click a word,
-triple-click a line, wheel to scroll, click tabs and their ×, click the tree,
-drag the sidebar edge to resize it, rest the pointer on a symbol to
-see its type and docs (needs its language server).
+### Leader key
+
+Press **Ctrl+T** and a menu slides up showing what each next key does.
+Keys are grouped by meaning:
+
+| Keys | Does |
+| --- | --- |
+| `l` | Go to line |
+| `1`–`9` | Jump to tab 1–9 |
+| `p` / `?` | Command palette / shortcuts panel |
+| `g` Go | `l` line · `d` definition · `b` back · `f` file |
+| `f` File | `s` save · `n` new · `w` close tab · `c` open config |
+| `s` Search | `f` in file · `p` in project · `n` / `N` next / previous match |
+| `c` Code | `f` format · `h` hover · `a` complete · `r` restart language server |
+| `t` Toggle | `s` sidebar · `n` line numbers · `b` cursor blink · `m` mouse |
+| `b` Tabs | `n` next · `p` previous · `w` close |
+
+So **Ctrl+T l** jumps to a line and **Ctrl+T g d** goes to a definition.
+Backspace steps back a level; Esc cancels. Add your own under
+`[leader_keys]` in the config.
+
+### Mouse
+
+Click to place the cursor, drag to select, double-click a word, triple-click
+a line, scroll with the wheel. Click tabs and their ×, and drag the sidebar's
+edge to resize it. Rest the pointer on a symbol to see its type and docs;
+hold Alt/Option to underline it as a link, and Alt/Option+Click to jump to
+its definition. Right-click files, folders or code for a context menu (new
+file/folder, rename, duplicate, delete, copy path, reveal in Finder; on code:
+go to definition, hover, format, cut/copy/paste, comment).
 
 ## Language servers
 
-kite starts a server the first time you open a file of that language, if the
-server is installed. Defaults:
+kite starts a language server the first time you open a file of that
+language, if the server is installed. Defaults:
 
 | Language | Server | Install |
 | --- | --- | --- |
@@ -67,94 +163,108 @@ server is installed. Defaults:
 | Python | pyright-langserver | `npm i -g pyright` |
 | TypeScript / JavaScript | typescript-language-server | `npm i -g typescript typescript-language-server` |
 | Go | gopls | `go install golang.org/x/tools/gopls@latest` |
-| C / C++ | clangd | comes with Xcode tools / LLVM |
+| C / C++ | clangd | Xcode command line tools, or LLVM |
 | JSON, CSS, HTML | vscode-*-language-server | `npm i -g vscode-langservers-extracted` |
-| YAML, TOML, shell | yaml-language-server, taplo, bash-language-server | |
+| YAML | yaml-language-server | `npm i -g yaml-language-server` |
+| TOML | taplo | `cargo install taplo-cli --features lsp` |
+| Shell | bash-language-server | `npm i -g bash-language-server` |
 
-If a server is missing or stops, the status bar shows a red `✗ server`
-marker; click it (or run "Code: Restart Language Server") to see why and try
-again. Without a running server, completion suggests words from your open
-files instead.
+The status bar shows the server's name and whether it's still starting or
+indexing. If a server is missing or stops, a red `✗ server` marker appears;
+click it (or Ctrl+T c r) to see why and try again. You can swap or add
+servers in the config.
 
-Syntax highlighting is built in for Rust, Python, JS/TS/TSX, Go, C, JSON,
-TOML, YAML, shell, CSS, HTML and Markdown and needs nothing installed.
+Syntax highlighting is built in for Rust, Python, JavaScript, TypeScript/TSX,
+Go, C, JSON, TOML, YAML, shell, CSS, HTML and Markdown.
 
 ## Configuration
 
-Run "Settings: Open Config File" from the palette. It creates and opens
-`~/.config/kite/config.toml`:
+Run **Settings: Open Config File** (Ctrl+T f c) to create and open
+`~/.config/kite/config.toml` (or `$XDG_CONFIG_HOME/kite/config.toml`). The
+Settings panel (Ctrl+,) changes the common options for you.
 
 ```toml
 tab_width = 4
+theme = "catppuccin_mocha"
 format_on_save = true
 
 [keys]
-"ctrl-t" = "file_finder"     # command ids are in src/commands.rs
-"ctrl-q" = "none"            # remove a default
+"ctrl-d" = "goto_definition"  # bind a key to a command id
+"ctrl-q" = "none"             # remove a default
+
+[leader_keys]
+"x" = "toggle_sidebar"        # Ctrl+T x
 
 [lsp]
-python = ["pylsp"]           # swap a server
-markdown = ["marksman", "server"]
+python = ["pylsp"]            # use a different server
 ```
 
-## Terminal notes (macOS)
+Every option, every command id and the full leader layout are in
+**[docs/CONFIGURATION.md](docs/CONFIGURATION.md)**.
 
-- Use a terminal with 24-bit colour and the kitty keyboard protocol for the
-  best experience: Ghostty, kitty, WezTerm or iTerm2. Others work, with
-  256 colours and F1 instead of Ctrl+Shift+P.
-- Option as a modifier: in Terminal.app enable "Use Option as Meta key"; in
-  iTerm2 set Option to "Esc+". Needed for Alt+arrows, Alt+] and Alt+Click.
-- Because kite handles the mouse, the terminal's own text selection is off.
-  Hold Option (iTerm2/Terminal) or Shift (most others) while dragging to use
-  it. Cmd+V pastes as usual; Ctrl+C / Ctrl+V use the system clipboard.
-- The file tree shows a coloured icon per file/folder type (via
-  [`devicons`](https://crates.io/crates/devicons)). This needs a
-  [Nerd Font](https://www.nerdfonts.com/) set as the terminal's font — without
-  one, icons show as boxes or blanks. Ghostty, kitty, WezTerm and iTerm2 all
-  support setting one.
+## Terminal setup
 
-## How the code is organised
+kite works in any modern terminal; these make it better:
 
-| File | What lives there |
+- **24-bit colour and the kitty keyboard protocol.** Ghostty, kitty, WezTerm
+  and iTerm2 have both. In other terminals colours fall back to 256, and
+  shortcuts like Ctrl+Shift+F can't be told apart from Ctrl+F (use the
+  leader key or F1 instead).
+- **A [Nerd Font](https://www.nerdfonts.com/)** as the terminal font, for the
+  file tree's icons. Without one they show as boxes or blanks.
+- **Option as Alt on macOS**, for Alt+arrows, Alt+] and Alt+K: in
+  Terminal.app enable "Use Option as Meta key"; in iTerm2 set Option to
+  "Esc+"; in Ghostty set `macos-option-as-alt = true`.
+
+Because kite handles the mouse, your terminal's own text selection is off
+while it runs. Hold Shift (Option in iTerm2 and Terminal.app) while dragging
+to use it.
+
+## Platform support
+
+| Platform | Status |
 | --- | --- |
-| `src/main.rs` | Terminal setup and the event loop |
-| `src/app.rs` | All state and behaviour: keys, mouse, commands, LSP responses |
-| `src/ui.rs` | Drawing; saves rectangles so clicks can be mapped back |
-| `src/buffer.rs` | Text (rope), cursor, selection, undo, editing operations |
-| `src/commands.rs` | The command table and default key bindings |
-| `src/palette.rs` | File finder, command palette, prompts, fuzzy matching |
-| `src/tree.rs` | Sidebar file tree |
-| `src/highlight.rs` | Language table and tree-sitter highlighting |
-| `src/lsp.rs` | Language server client (JSON-RPC over stdio) |
-| `src/config.rs`, `src/theme.rs` | Config file and colours |
+| macOS | Used daily; the primary platform |
+| Linux | Expected to work (file manager via `xdg-open`); lightly tested |
+| Windows | Untested; contributions welcome |
 
-The app is single-threaded. One thread reads terminal input and one per
-language server reads its output; all of them send events down one channel,
-and the main loop handles an event, then redraws.
+## Troubleshooting
 
-Common changes:
+- **No completions or hover.** Check the status bar for a red `✗` marker and
+  click it for the reason. Language servers also need the project's own file
+  to work: a `Cargo.toml` for Rust, a `package.json` (and installed
+  `node_modules`) for TypeScript, and so on.
+- **A shortcut does nothing.** Your terminal may be using it, or not sending
+  it. Every command is also in the palette (Ctrl+P) and most are on the
+  leader key (Ctrl+T).
+- **Alt/Option shortcuts don't work.** See *Option as Alt* in
+  [Terminal setup](#terminal-setup).
+- **Icons show as boxes.** Set a Nerd Font as your terminal's font.
+- **`config.toml` errors.** kite still starts with defaults and shows the
+  first problem in the status bar.
 
-- **Add a command**: one line in the `commands!` table in `commands.rs`, a
-  match arm in `App::run` in `app.rs`, optionally a default key. It appears
-  in the palette automatically.
-- **Add a language**: one entry in `langs()` in `highlight.rs` (and a
-  tree-sitter grammar crate if you want highlighting), plus a default server
-  in `config.rs`.
-- **Change colours**: `Theme::one_dark()` in `theme.rs`.
+## Roadmap
 
-`cargo test` runs the unit tests (buffer editing, key parsing, fuzzy
-matching, highlighting queries, LSP framing).
-
-## Not built yet
-
-Roughly in the order I'd do them:
+Roughly in order:
 
 1. Find and replace
-2. Rename / delete / move in the file tree; reload files changed on disk
-3. Split panes
-4. Integrated terminal panel
-5. LSP extras: signature help, rename symbol, find references, code actions,
-   auto-import on completion, incremental document sync
+2. Move files in the tree; reload files changed on disk
+3. Find references, rename symbol, signature help, code actions
+4. Split panes
+5. Integrated terminal panel
 6. Git gutter and branch in the status bar
-7. Multiple cursors
-8. Soft wrap
+7. Keyboard macros (record and replay)
+8. Multiple cursors, soft wrap
+
+Ideas and help with any of these are welcome; open an issue to discuss.
+
+## Contributing
+
+Contributions of all sizes are welcome: bug reports, docs, small fixes and
+features. Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**, which covers
+setting up, testing, code style and how changes are reviewed, and
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for a tour of the code.
+
+## License
+
+[MIT](LICENSE). Contributions are accepted under the same license.

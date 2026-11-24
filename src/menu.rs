@@ -205,7 +205,7 @@ mod tests {
     use super::*;
 
     fn keys() -> Keymap {
-        Keymap::new(&Default::default()).0
+        Keymap::new(&Default::default(), &Default::default()).0
     }
 
     fn labels(m: &ContextMenu) -> Vec<&str> {

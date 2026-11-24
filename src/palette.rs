@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn modes_follow_the_input_prefix() {
-        let (km, _) = Keymap::new(&Default::default());
+        let (km, _) = Keymap::new(&Default::default(), &Default::default());
         let mut p = Palette::new(Path::new("/nonexistent-kite"), &km, ">");
         assert_eq!(p.items.len(), Command::ALL.len() - 1);
         p.input = ">save".into();

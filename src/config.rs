@@ -21,6 +21,8 @@ pub struct Config {
     pub theme: String,
     /// Key overrides: `"ctrl-s" = "save"`. See commands.rs for command ids.
     pub keys: BTreeMap<String, String>,
+    /// Keys after the leader key: `"g l" = "goto_line"`, or `"none"`.
+    pub leader_keys: BTreeMap<String, String>,
     /// Language servers by language id: `rust = ["rust-analyzer"]`.
     /// An empty list disables the server for that language.
     pub lsp: BTreeMap<String, Vec<String>>,
@@ -38,6 +40,7 @@ impl Default for Config {
             mouse_support: true,
             theme: "one_dark".to_string(),
             keys: BTreeMap::new(),
+            leader_keys: BTreeMap::new(),
             lsp: BTreeMap::new(),
         }
     }
@@ -133,6 +136,12 @@ pub const TEMPLATE: &str = r#"# kite configuration. Restart kite to apply change
 [keys]
 # "ctrl-t" = "file_finder"
 # "ctrl-d" = "goto_definition"
+
+# Keys after the leader key (Ctrl+T by default; rebind it with
+# "ctrl-..." = "leader" above). Space-separated single characters.
+[leader_keys]
+# "x" = "toggle_sidebar"
+# "g d" = "none"
 
 # Language servers, by language id. Use an empty list to turn one off.
 [lsp]

@@ -4,7 +4,7 @@
 
 use crate::app::{App, Focus, Row, SETTINGS_ROWS, SettingsRow, from_lsp_pos};
 use crate::buffer::char_width;
-use crate::commands::Command;
+use crate::commands::{Command, LeaderEntry};
 use crate::highlight::{Syntax, Token};
 use crate::menu::MenuEntry;
 use crate::palette::MAX_ROWS;
@@ -94,6 +94,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     draw_status(buf, app, Rect::new(0, main_h, area.width, 1));
     draw_shortcuts(buf, app, Rect::new(0, 0, area.width, main_h));
+    draw_leader(buf, app, Rect::new(0, 0, area.width, main_h));
     let palette_cursor = draw_palette(buf, app, area);
     draw_context_menu(buf, app, area);
 
@@ -105,7 +106,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         },
     );
     let blinked_out = app.cfg.cursor_blink && app.blink_off;
-    let covered = app.menu.is_some() || app.shortcuts.is_some();
+    let covered = app.menu.is_some() || app.shortcuts.is_some() || app.leader.is_some();
     if let Some(pos) = cursor.filter(|_| !covered && !blinked_out) {
         f.set_cursor_position(pos);
     }
@@ -1220,6 +1221,100 @@ const EDITOR_KEYS: &[(&str, &str)] = &[
     ("Esc", "Close popups"),
 ];
 
+/// A command's title without its group prefix: "File: Save" → "Save".
+fn short_title(cmd: Command) -> &'static str {
+    cmd.title().split_once(": ").map_or(cmd.title(), |(_, t)| t)
+}
+
+/// The leader key's menu: a strip along the bottom of `area` listing what
+/// each next key does, groups (which open more keys) first.
+fn draw_leader(buf: &mut Buf, app: &App, area: Rect) {
+    let Some(path) = &app.leader else { return };
+    let Some(group) = app.keymap.leader.at(path) else {
+        return;
+    };
+    let mut items: Vec<(String, String, bool)> = vec![];
+    for (c, entry) in &group.items {
+        if let LeaderEntry::Group(g) = entry {
+            items.push((c.to_string(), format!("{}…", g.name), true));
+        }
+    }
+    for (c, entry) in &group.items {
+        if let LeaderEntry::Run(cmd) = entry {
+            items.push((c.to_string(), short_title(*cmd).to_string(), false));
+        }
+    }
+    if path.is_empty() {
+        items.push(("1-9".to_string(), "Tab 1–9".to_string(), false));
+    }
+
+    const KEY_W: u16 = 5;
+    const COL_W: u16 = 28;
+    let cols = (area.width.saturating_sub(2) / COL_W).max(1) as usize;
+    let rows = items.len().div_ceil(cols).max(1);
+    let h = (rows as u16 + 2).min(area.height);
+    let r = Rect::new(area.x, area.bottom() - h, area.width, h);
+    let th = &app.theme;
+    fill(buf, r, Style::new().bg(th.popup).fg(th.fg));
+
+    // Title: "Ctrl+T › Go", naming each group pressed so far.
+    let mut title = app
+        .keymap
+        .binding(Command::Leader)
+        .unwrap_or_else(|| "Leader".to_string());
+    for i in 0..path.len() {
+        if let Some(g) = app.keymap.leader.at(&path[..=i]) {
+            title.push_str(&format!(" › {}", g.name));
+        }
+    }
+    let bar = Style::new().bg(th.popup_sel);
+    fill(buf, Rect::new(r.x, r.y, r.width, 1), bar);
+    text(
+        buf,
+        r.x + 1,
+        r.y,
+        &title,
+        r.width - 1,
+        bar.fg(th.accent).add_modifier(Modifier::BOLD),
+    );
+    let hint = if path.is_empty() {
+        "Esc cancel  "
+    } else {
+        "⌫ back · Esc cancel  "
+    };
+    right_text(
+        buf,
+        r.right(),
+        r.y,
+        hint,
+        r.x + title.width() as u16 + 3,
+        bar.fg(th.dim),
+    );
+
+    let bg = Style::new().bg(th.popup);
+    for (i, (key, label, is_group)) in items.iter().enumerate() {
+        let (col, row) = (i / rows, i % rows);
+        let x = r.x + 2 + col as u16 * COL_W;
+        let y = r.y + 1 + row as u16;
+        if x >= r.right() || y >= r.bottom() {
+            continue;
+        }
+        let w = COL_W.min(r.right() - x);
+        text(
+            buf,
+            x,
+            y,
+            key,
+            KEY_W.min(w),
+            bg.fg(th.accent).add_modifier(Modifier::BOLD),
+        );
+        if w > KEY_W {
+            let fg = if *is_group { th.keyword } else { th.fg };
+            text(buf, x + KEY_W, y, label, w - KEY_W - 1, bg.fg(fg));
+        }
+    }
+}
+
 /// Every bound command, grouped by the prefix of its title ("File: Save").
 fn shortcut_lines(app: &App) -> Vec<ShortcutLine> {
     const GROUPS: &[&str] = &["", "File", "Edit", "View", "Code", "Settings", "Help"];
@@ -1245,6 +1340,17 @@ fn shortcut_lines(app: &App) -> Vec<ShortcutLine> {
             lines.extend(items);
             lines.push(ShortcutLine::Blank);
         }
+    }
+    if let Some(lead) = app.keymap.binding(Command::Leader) {
+        lines.push(ShortcutLine::Header("Leader"));
+        for (seq, cmd) in app.keymap.leader.sequences() {
+            lines.push(ShortcutLine::Item(
+                format!("{lead} {seq}"),
+                short_title(cmd),
+            ));
+        }
+        lines.push(ShortcutLine::Item(format!("{lead} 1-9"), "Jump to tab"));
+        lines.push(ShortcutLine::Blank);
     }
     lines.push(ShortcutLine::Header("Editor"));
     for (keys, label) in EDITOR_KEYS {

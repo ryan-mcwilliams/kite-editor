@@ -2,7 +2,7 @@
 //! command and language-server message. Drawing lives in ui.rs.
 
 use crate::buffer::{Buffer, is_word};
-use crate::commands::{Command, Keymap, normalize};
+use crate::commands::{Command, Keymap, LeaderEntry, normalize};
 use crate::config::{self, Config};
 use crate::fileops;
 use crate::lsp::{self, Pending, Server};
@@ -326,6 +326,8 @@ pub struct App {
     pub settings_panel: Option<SettingsPanel>,
     /// The keyboard shortcuts panel, open at this scroll offset.
     pub shortcuts: Option<usize>,
+    /// The leader key's menu is open, with these keys pressed after it.
+    pub leader: Option<Vec<char>>,
     pub menu: Option<ContextMenu>,
     /// The path a pending Rename prompt applies to.
     prompt_target: Option<PathBuf>,
@@ -481,7 +483,7 @@ fn base64(data: &[u8]) -> String {
 impl App {
     pub fn new(root: PathBuf, tx: Sender<AppEvent>) -> App {
         let (cfg, cfg_err) = Config::load();
-        let (keymap, key_errs) = Keymap::new(&cfg.keys);
+        let (keymap, key_errs) = Keymap::new(&cfg.keys, &cfg.leader_keys);
         let status = cfg_err
             .or_else(|| key_errs.first().map(|e| format!("config.toml: {e}")))
             .unwrap_or_default();
@@ -503,6 +505,7 @@ impl App {
             search_follow: true,
             settings_panel: None,
             shortcuts: None,
+            leader: None,
             menu: None,
             prompt_target: None,
             completion: None,
@@ -680,6 +683,13 @@ impl App {
             NewFile => self.palette = Some(Palette::prompt(&self.root, Prompt::NewFile, "")),
             CloseTab => self.close_tab(self.active),
             Shortcuts => self.shortcuts = Some(0),
+            Leader => {
+                self.close_popups();
+                self.leader = Some(vec![]);
+            }
+            ToggleLineNumbers => self.toggle_setting(SettingId::LineNumbers),
+            ToggleCursorBlink => self.toggle_setting(SettingId::CursorBlink),
+            ToggleMouse => self.toggle_setting(SettingId::MouseSupport),
             Quit => {
                 let dirty = self.buffers.iter().filter(|b| b.dirty).count();
                 if dirty > 0 && self.was_armed != Some(Armed::Quit) {
@@ -1053,6 +1063,9 @@ impl App {
         let key = normalize(k.code, k.modifiers);
         let plain = (k.modifiers - KeyModifiers::SHIFT).is_empty();
 
+        if let Some(path) = self.leader.take() {
+            return self.leader_key(path, k.code, k.modifiers);
+        }
         // The shortcuts panel scrolls with the arrows; Esc or its own key
         // closes it, and any other key closes it and then does its usual job.
         if let Some(scroll) = &mut self.shortcuts {
@@ -1534,9 +1547,63 @@ impl App {
     /// Toggle or cycle the currently-selected setting, apply its side effect
     /// immediately, and persist the change to `config.toml`.
     fn apply_selected_setting(&mut self, delta: isize) {
-        let Some(id) = self.settings_panel.as_ref().and_then(|p| p.selected()) else {
-            return;
+        if let Some(id) = self.settings_panel.as_ref().and_then(|p| p.selected()) {
+            self.apply_setting(id, delta);
+        }
+    }
+
+    /// Flip an on/off setting from a command, and say which way it went.
+    fn toggle_setting(&mut self, id: SettingId) {
+        self.apply_setting(id, 1);
+        let on = id.value(&self.cfg) == checkbox(true);
+        self.set_status(format!("{}: {}", id.label(), if on { "on" } else { "off" }));
+    }
+
+    /// A key pressed while the leader menu is open, `path` keys deep:
+    /// a letter opens a group or runs a command, Backspace steps back out,
+    /// 1-9 at the top jump to that tab, and anything else closes the menu.
+    fn leader_key(&mut self, mut path: Vec<char>, code: KeyCode, mods: KeyModifiers) {
+        let c = match code {
+            KeyCode::Char(c) if !mods.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) => c,
+            KeyCode::Backspace if !path.is_empty() => {
+                path.pop();
+                self.leader = Some(path);
+                return;
+            }
+            _ => return,
         };
+        let entry = self
+            .keymap
+            .leader
+            .at(&path)
+            .and_then(|g| match g.items.get(&c)? {
+                LeaderEntry::Group(_) => Some(None),
+                LeaderEntry::Run(cmd) => Some(Some(*cmd)),
+            });
+        match entry {
+            Some(None) => {
+                path.push(c);
+                self.leader = Some(path);
+            }
+            Some(Some(cmd)) => self.run(cmd),
+            None if path.is_empty() && c.is_ascii_digit() && c != '0' => {
+                let i = c as usize - '1' as usize;
+                if i < self.buffers.len() {
+                    self.switch_tab(i);
+                } else {
+                    self.set_status(format!("There's no tab {c}"));
+                }
+            }
+            None => {
+                let keys: String = path.iter().chain([&c]).map(|k| format!(" {k}")).collect();
+                self.set_status(format!("Nothing is on leader{keys}"));
+            }
+        }
+    }
+
+    /// Change a setting as the Settings panel would, apply it immediately,
+    /// and persist it to `config.toml`.
+    fn apply_setting(&mut self, id: SettingId, delta: isize) {
         match id {
             SettingId::Theme => {
                 use crate::theme::{ALL_THEMES, ThemeId};
@@ -1853,6 +1920,10 @@ impl App {
         self.hover_dwell = None;
         self.hover_word = None;
         self.link_word = None;
+        // A click anywhere dismisses the leader menu, and does nothing else.
+        if self.leader.take().is_some() && matches!(m.kind, MouseEventKind::Down(_)) {
+            return;
+        }
         let in_tree = self.show_tree && self.layout.tree.contains(at);
         if matches!(m.kind, MouseEventKind::Down(_)) {
             self.was_armed = self.armed.take();
